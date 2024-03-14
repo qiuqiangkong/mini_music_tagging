@@ -16,8 +16,23 @@ sh env.sh
 
 ```
 
-# Train
-python train.py
+# Single GPU training.
+
+Here is an example of Pytorch for single GPU training.
+
+```python
+CUDA_VISIBLE_DEVICES=0 python train.py
+```
+
+# Multiple GPUs training.
+
+For multiple GPUs training, Lightning Fabric is recommended due to its easy to use. Users just need to add less than 10 lines to the Pytorch code to train on multiple GPUs. Example:
+
+```python
+CUDA_VISIBLE_DEVICES=3 python train_fabric.py
+```
 
 # Inference
-python inference.py
+```python
+CUDA_VISIBLE_DEVICES=0 python inference.py
+```

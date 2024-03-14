@@ -34,7 +34,6 @@ def inference(args):
 
     # Load checkpoint
     checkpoint_path = Path("checkpoints", "train", model_name, "latest.pth")
-    # checkpoint_path = Path("checkpoints", "train", model_name, "step=6000.pth")
 
     model = get_model(model_name, classes_num)
     model.load_state_dict(torch.load(checkpoint_path))

@@ -99,39 +99,39 @@ class Cnn(nn.Module):
 
         return output
 
-    def cut_image(self, x):
-        """Cut a spectrum that can be evenly divided by downsample_ratio.
+    # def cut_image(self, x):
+    #     """Cut a spectrum that can be evenly divided by downsample_ratio.
 
-        Args:
-            x: E.g., (B, C, 201, 1025)
+    #     Args:
+    #         x: E.g., (B, C, 201, 1025)
         
-        Outpus:
-            output: E.g., (B, C, 208, 1024)
-        """
+    #     Outpus:
+    #         output: E.g., (B, C, 208, 1024)
+    #     """
 
-        B, C, T, Freq = x.shape
+    #     B, C, T, Freq = x.shape
 
-        pad_len = (
-            int(np.ceil(T / self.downsample_ratio)) * self.downsample_ratio
-            - T
-        )
-        x = F.pad(x, pad=(0, 0, 0, pad_len))
+    #     pad_len = (
+    #         int(np.ceil(T / self.downsample_ratio)) * self.downsample_ratio
+    #         - T
+    #     )
+    #     x = F.pad(x, pad=(0, 0, 0, pad_len))
 
-        output = x[:, :, :, 0 : Freq - 1]
+    #     output = x[:, :, :, 0 : Freq - 1]
 
-        return output
+    #     return output
 
-    def patch_image(self, x, time_steps):
-        """Patch a spectrum to the original shape. E.g.,
+    # def patch_image(self, x, time_steps):
+    #     """Patch a spectrum to the original shape. E.g.,
         
-        Args:
-            x: E.g., (B, C, 208, 1024)
+    #     Args:
+    #         x: E.g., (B, C, 208, 1024)
         
-        Outpus:
-            output: E.g., (B, C, 201, 1025)
-        """
-        x = F.pad(x, pad=(0, 1))
+    #     Outpus:
+    #         output: E.g., (B, C, 201, 1025)
+    #     """
+    #     x = F.pad(x, pad=(0, 1))
 
-        output = x[:, :, 0 : time_steps, :]
+    #     output = x[:, :, 0 : time_steps, :]
 
-        return output
+    #     return output

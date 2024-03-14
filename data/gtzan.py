@@ -93,21 +93,20 @@ class Gtzan:
 
 	def __getitem__(self, index):
 
-		audio_index = random.randint(0, self.audios_num - 1)
-
-		audio_path = self.meta_dict["audio_path"][audio_index]
+		audio_path = self.meta_dict["audio_path"][index]
 
 		# Load audio.
 		audio = self.load_audio(audio_path)
 		# shape: (audio_samples)
 
-		label = self.meta_dict["label"][audio_index]
+		label = self.meta_dict["label"][index]
 		class_index = LB_TO_IX[label]
 
 		target = np.zeros(CLASSES_NUM)
 		target[class_index] = 1
 
 		data = {
+			"audio_path": str(audio_path),
 			"audio": audio,
 			"target": target
 		}
@@ -135,9 +134,11 @@ class Gtzan:
 		)
 		# shape: (audio_samples,)
 
-		audio = torch.Tensor(
-			librosa.util.fix_length(data=audio.numpy(), size=self.segment_samples, axis=0)
-		)
+		audio = np.array(librosa.util.fix_length(
+			data=audio, 
+			size=self.segment_samples, 
+			axis=0
+		))
 		# shape: (audio_samples,)
 
 		return audio
