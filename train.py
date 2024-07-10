@@ -1,20 +1,18 @@
 import torch
 import torch.nn.functional as F
-import time
-import librosa
+from torch.utils.data.sampler import SequentialSampler
 import numpy as np
 import soundfile
-import matplotlib.pyplot as plt
 from pathlib import Path
 import torch.optim as optim
-from data.gtzan import Gtzan, CLASSES_NUM
-from data.collate import collate_fn
-from models.cnn import Cnn
 from tqdm import tqdm
-import museval
 import argparse
 import random
-from torch.utils.data.sampler import SequentialSampler
+import wandb
+wandb.require("core")
+
+from data.gtzan import GTZAN
+from models.cnn import Cnn
 
 
 def train(args):
@@ -23,56 +21,64 @@ def train(args):
     model_name = args.model_name
 
     # Default parameters
-    fold = 0
+    test_fold = 0
+    sr = 16000
     batch_size = 16
     num_workers = 16
+    pin_memory = True
+    learning_rate = 1e-4
     test_step_frequency = 200
     save_step_frequency = 200
     training_steps = 10000
     debug = False
+    wandb_log = True
     device = "cuda"
+
     filename = Path(__file__).stem
-    classes_num = CLASSES_NUM
+    classes_num = GTZAN.classes_num
 
     checkpoints_dir = Path("./checkpoints", filename, model_name)
 
     root = "/datasets/gtzan"
 
+    if wandb_log:
+        wandb.init(project="mini_music_tagging") 
+
     # Dataset
-    train_dataset = Gtzan(
+    train_dataset = GTZAN(
         root=root,
         split="train",
-        fold=fold,
+        test_fold=test_fold,
+        sr=sr,
     )
 
-    test_dataset = Gtzan(
+    test_dataset = GTZAN(
         root=root,
         split="test",
-        fold=fold,
+        test_fold=test_fold,
+        sr=sr,
     )
 
     # Sampler
-    train_sampler = Sampler(dataset_size=len(train_dataset))
+    train_sampler = InfiniteSampler(train_dataset)
     
     test_sampler = SequentialSampler(test_dataset)
-
+    
     # Dataloader
     train_dataloader = torch.utils.data.DataLoader(
         dataset=train_dataset, 
         batch_size=batch_size, 
         sampler=train_sampler,
-        collate_fn=collate_fn,
         num_workers=num_workers, 
-        pin_memory=True
+        pin_memory=pin_memory
     )
 
     test_dataloader = torch.utils.data.DataLoader(
         dataset=test_dataset, 
         batch_size=batch_size, 
         sampler=test_sampler,
-        collate_fn=collate_fn,
-        num_workers=num_workers, 
-        pin_memory=True
+        num_workers=1, 
+        pin_memory=pin_memory
     )
 
     # Model
@@ -80,7 +86,7 @@ def train(args):
     model.to(device)
 
     # Optimizer
-    optimizer = optim.AdamW(model.parameters(), lr=0.001)
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 
     # Create checkpoints directory
     Path(checkpoints_dir).mkdir(parents=True, exist_ok=True)
@@ -88,29 +94,36 @@ def train(args):
     # Train
     for step, data in enumerate(tqdm(train_dataloader)):
 
+        # Move data to device
         audio = data["audio"].to(device)
         target = data["target"].to(device)
 
-        # Play the audio.
+        # Play the audio
         if debug:
             play_audio(mixture, target)
 
-        optimizer.zero_grad()
-
+        # Forward
         model.train()
         output = model(audio=audio)
 
+        # Loss
         loss = bce_loss(output, target)
-        loss.backward()
 
-        optimizer.step()
-
-        if step % 200 == 0:
-            print("step: {}, loss: {:.3f}".format(step, loss.item()))
+        # Optimize
+        optimizer.zero_grad()   # Reset all parameter.grad to 0
+        loss.backward()     # Update all parameter.grad
+        optimizer.step()    # Update all parameters based on all parameter.grad
 
         if step % test_step_frequency == 0:
-            accuracy = validate(model, test_dataloader)
+            print("step: {}, loss: {:.3f}".format(step, loss.item()))
+            test_acc = validate(model, test_dataloader)
             print("Accuracy: {}".format(accuracy))
+
+            if wandb_log:
+                wandb.log(
+                    data={"test_acc": test_acc},
+                    step=step
+                )
 
         # Save model
         if step % save_step_frequency == 0:
@@ -143,35 +156,37 @@ def play_audio(mixture, target):
     from IPython import embed; embed(using=False); os._exit(0)
 
 
-class Sampler:
-    def __init__(self, dataset_size):
-        self.indexes = list(range(dataset_size))
+class InfiniteSampler:
+    def __init__(self, dataset):
+
+        self.indexes = list(range(len(dataset)))
         random.shuffle(self.indexes)
         
     def __iter__(self):
 
-        pointer = 0
+        i = 0
 
         while True:
 
-            if pointer == len(self.indexes):
+            if i == len(self.indexes):
                 random.shuffle(self.indexes)
-                pointer = 0
+                i = 0
                 
-            index = self.indexes[pointer]
-            pointer += 1
+            index = self.indexes[i]
+            i += 1
 
             yield index
 
 
 def validate(model, dataloader):
 
-    pred_ids = []
-    target_ids = []
     device = next(model.parameters()).device
 
-    for data in dataloader:
+    pred_ids = []
+    target_ids = []
 
+    for step, data in enumerate(dataloader):
+        
         segment = torch.Tensor(data["audio"]).to(device)
         target = torch.Tensor(data["target"]).to(device)
 
@@ -184,8 +199,8 @@ def validate(model, dataloader):
 
     pred_ids = np.concatenate(pred_ids, axis=0)
     target_ids = np.concatenate(target_ids, axis=0)
-        
-    accuracy = np.mean(pred_ids == target_ids)
+    accuracy = np.mean(pred_ids == target_ids) 
+
     return accuracy
 
 

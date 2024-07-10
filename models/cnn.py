@@ -28,7 +28,7 @@ class ConvBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(out_channels)
 
     def forward(self, x):
-        """
+        r"""
         Args:
             x: (batch_size, in_channels, time_steps, freq_bins)
 
@@ -67,30 +67,27 @@ class Cnn(nn.Module):
         self.onset_fc = nn.Linear(256, classes_num)
 
     def forward(self, audio):
-        """Separation model.
-
+        r"""
         Args:
-            mixture: (batch_size, channels_num, samples_num)
+            audio: (batch_size, channels_num, samples_num)
 
         Outputs:
-            output: (batch_size, channels_num, samples_num)
+            output: (batch_size, classes_num)
         """
         
         x = self.mel_extractor(audio)
-        # shape: (B, Freq, T)
-        
+        # shape: (B, 1, F, T)
+
         x = torch.log10(torch.clamp(x, 1e-8))
 
-        x = rearrange(x, 'b f t -> b t f')
-        x = x[:, None, :, :]
-        # shape: (B, 1, T, Freq)
+        x = rearrange(x, 'b c f t -> b c t f')
+        # shape: (B, 1, T, F)
 
-        # from IPython import embed; embed(using=False); os._exit(0)
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.conv3(x)
         x = self.conv4(x)
-        # shape: (B, C, T, Freq)
+        # shape: (B, C, T, F)
 
         x, _ = torch.max(x, dim=-1)
         x, _ = torch.max(x, dim=-1)
@@ -98,40 +95,3 @@ class Cnn(nn.Module):
         output = torch.sigmoid(self.onset_fc(x))
 
         return output
-
-    # def cut_image(self, x):
-    #     """Cut a spectrum that can be evenly divided by downsample_ratio.
-
-    #     Args:
-    #         x: E.g., (B, C, 201, 1025)
-        
-    #     Outpus:
-    #         output: E.g., (B, C, 208, 1024)
-    #     """
-
-    #     B, C, T, Freq = x.shape
-
-    #     pad_len = (
-    #         int(np.ceil(T / self.downsample_ratio)) * self.downsample_ratio
-    #         - T
-    #     )
-    #     x = F.pad(x, pad=(0, 0, 0, pad_len))
-
-    #     output = x[:, :, :, 0 : Freq - 1]
-
-    #     return output
-
-    # def patch_image(self, x, time_steps):
-    #     """Patch a spectrum to the original shape. E.g.,
-        
-    #     Args:
-    #         x: E.g., (B, C, 208, 1024)
-        
-    #     Outpus:
-    #         output: E.g., (B, C, 201, 1025)
-    #     """
-    #     x = F.pad(x, pad=(0, 1))
-
-    #     output = x[:, :, 0 : time_steps, :]
-
-    #     return output

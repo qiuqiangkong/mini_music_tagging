@@ -1,19 +1,11 @@
+import argparse
 import torch
-import time
-import pickle
-import librosa
 import numpy as np
 from pathlib import Path
-import torch.optim as optim
-from data.gtzan import Gtzan, CLASSES_NUM
-from data.collate import collate_fn
-from models.cnn import Cnn
-from tqdm import tqdm
-import argparse
-import matplotlib.pyplot as plt
-from train import get_model
-
 from torch.utils.data.sampler import SequentialSampler
+
+from data.gtzan import GTZAN
+from train import get_model
 
 
 def inference(args):
@@ -22,13 +14,12 @@ def inference(args):
     model_name = args.model_name
 
     # Default parameters
-    fold = 0
+    test_fold = 0
+    sr = 16000
     batch_size = 16
-    num_workers = 16
     device = "cuda"
     filename = Path(__file__).stem
-
-    classes_num = CLASSES_NUM
+    classes_num = GTZAN.classes_num
 
     root = "/datasets/gtzan"
 
@@ -39,28 +30,30 @@ def inference(args):
     model.load_state_dict(torch.load(checkpoint_path))
     model.to(device)
 
-    dataset = Gtzan(
+    # Test dataset
+    test_dataset = GTZAN(
         root=root,
         split="test",
-        fold=fold,
+        test_fold=test_fold,
+        sr=sr,
     )
 
-    sampler = SequentialSampler(dataset)
+    # Test sampler
+    test_sampler = SequentialSampler(test_dataset)
 
     # Dataloader
-    dataloader = torch.utils.data.DataLoader(
-        dataset=dataset, 
+    test_dataloader = torch.utils.data.DataLoader(
+        dataset=test_dataset, 
         batch_size=batch_size, 
-        sampler=sampler,
-        collate_fn=collate_fn,
-        num_workers=num_workers, 
+        sampler=test_sampler,
+        num_workers=16, 
         pin_memory=True
     )
 
     pred_ids = []
     target_ids = []
 
-    for data in dataloader:
+    for data in test_dataloader:
 
         segment = torch.Tensor(data["audio"]).to(device)
         target = data["target"]
@@ -77,10 +70,7 @@ def inference(args):
         
     accuracy = np.mean(pred_ids == target_ids)
 
-    print(accuracy)
-
-    from IPython import embed; embed(using=False); os._exit(0)
-
+    print("Accuracy: {:.3f}".format(accuracy))
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-import lightning as L
 import time
 import librosa
 import numpy as np
@@ -16,9 +15,6 @@ import museval
 import argparse
 import random
 from torch.utils.data.sampler import SequentialSampler
-
-from train import validate, get_model, bce_loss, play_audio
-from data.samplers import DistributedInfiniteSampler
 
 
 def train(args):
@@ -42,12 +38,6 @@ def train(args):
 
     root = "/datasets/gtzan"
 
-    # Fabric
-    devices_num = torch.cuda.device_count()
-
-    fabric = L.Fabric(accelerator="cuda", devices=devices_num, strategy="ddp")
-    fabric.launch()
-
     # Dataset
     train_dataset = Gtzan(
         root=root,
@@ -61,12 +51,10 @@ def train(args):
         fold=fold,
     )
 
-    # Train sampler
-    train_sampler = DistributedInfiniteSampler(dataset_size=len(train_dataset))
+    # Sampler
+    train_sampler = Sampler(dataset_size=len(train_dataset))
     
-    # Validate sampler (optional)
     test_sampler = SequentialSampler(test_dataset)
-
 
     # Dataloader
     train_dataloader = torch.utils.data.DataLoader(
@@ -89,13 +77,10 @@ def train(args):
 
     # Model
     model = get_model(model_name, classes_num)
+    model.to(device)
 
     # Optimizer
     optimizer = optim.AdamW(model.parameters(), lr=0.001)
-
-    model, optimizer = fabric.setup(model, optimizer)
-    train_dataloader = fabric.setup_dataloaders(train_dataloader, use_distributed_sampler=False)
-    test_dataloader = fabric.setup_dataloaders(test_dataloader, use_distributed_sampler=False)
 
     # Create checkpoints directory
     Path(checkpoints_dir).mkdir(parents=True, exist_ok=True)
@@ -103,35 +88,34 @@ def train(args):
     # Train
     for step, data in enumerate(tqdm(train_dataloader)):
 
-        audio = data["audio"]
-        target = data["target"]
+        # Move data to device
+        audio = data["audio"].to(device)
+        target = data["target"].to(device)
 
-        # Play the audio.
+        # Play the audio
         if debug:
             play_audio(mixture, target)
 
-        optimizer.zero_grad()
-
+        # Forward
         model.train()
         output = model(audio=audio)
 
+        # Loss
         loss = bce_loss(output, target)
-        fabric.backward(loss)
 
-        optimizer.step()
+        # Optimize
+        optimizer.zero_grad()   # Reset parameter.grad to 0
+        loss.backward()     # Update parameter.grad
+        optimizer.step()    # Update parameters based on parameter.grad
+        from IPython import embed; embed(using=False); os._exit(0)
 
-        if step % 200 == 0:
-            print("step: {}, loss: {:.3f}".format(step, loss.item()))
-
-        # Validate
-        # if step % test_step_frequency == 0 and fabric.global_rank == 0:
         if step % test_step_frequency == 0:
+            print("step: {}, loss: {:.3f}".format(step, loss.item()))
             accuracy = validate(model, test_dataloader)
             print("Accuracy: {}".format(accuracy))
-            
-        # Save model
-        if step % save_step_frequency == 0 and fabric.global_rank == 0:
 
+        # Save model
+        if step % save_step_frequency == 0:
             checkpoint_path = Path(checkpoints_dir, "step={}.pth".format(step))
             torch.save(model.state_dict(), checkpoint_path)
             print("Save model to {}".format(checkpoint_path))
@@ -144,16 +128,55 @@ def train(args):
             break
 
 
+def get_model(model_name, classes_num):
+    if model_name == "Cnn":
+        return Cnn(classes_num)
+    else:
+        raise NotImplementedError
+
+
+def bce_loss(output, target):
+    return F.binary_cross_entropy(output, target)
+
+
+def play_audio(mixture, target):
+    soundfile.write(file="tmp_mixture.wav", data=mixture[0].cpu().numpy().T, samplerate=44100)
+    soundfile.write(file="tmp_target.wav", data=target[0].cpu().numpy().T, samplerate=44100)
+    from IPython import embed; embed(using=False); os._exit(0)
+
+
+class Sampler:
+    def __init__(self, dataset_size):
+        self.indexes = list(range(dataset_size))
+        random.shuffle(self.indexes)
+        
+    def __iter__(self):
+
+        pointer = 0
+
+        while True:
+
+            if pointer == len(self.indexes):
+                random.shuffle(self.indexes)
+                pointer = 0
+                
+            index = self.indexes[pointer]
+            pointer += 1
+
+            yield index
+
+
 def validate(model, dataloader):
+
+    device = next(model.parameters()).device
 
     pred_ids = []
     target_ids = []
-    device = next(model.parameters()).device
 
-    for data in dataloader:
+    for step, data in enumerate(dataloader):
 
-        segment = data["audio"]
-        target = data["target"]
+        segment = torch.Tensor(data["audio"]).to(device)
+        target = torch.Tensor(data["target"]).to(device)
 
         with torch.no_grad():
             model.eval()
@@ -164,8 +187,8 @@ def validate(model, dataloader):
 
     pred_ids = np.concatenate(pred_ids, axis=0)
     target_ids = np.concatenate(target_ids, axis=0)
-        
-    accuracy = np.mean(pred_ids == target_ids)
+    accuracy = np.mean(pred_ids == target_ids) 
+
     return accuracy
 
 
