@@ -3,7 +3,7 @@
 
 This is an example of building a music tagging system with neural networks. We use the GTZAN dataset containing 1,000 30-second audio clips for training and validation. The GTZAN dataset contains 10 genres. We use 900 audio files for training and use 100 audio files for validation. Here are the log mel spectrograms of different genre audios.
 
-![Log mel spectrogram](assets/data_spectrogram.png)
+![Log mel spectrogram](assets/data_spectrograms.png)
 
 The original link dataset link: [http://marsyas.info/index.html](http://marsyas.info/index.html) is not available anymore. Please search other sources to download the dataset. The downloaded dataset looks like:
 
