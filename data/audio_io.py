@@ -1,16 +1,17 @@
 from typing import Union
+
 import librosa
+import numpy as np
 import torch
 import torchaudio
-import numpy as np
 
 
 def load(
     path: str, 
     sr: int, 
     mono: bool = True,
-    offset: float = 0., 
-    duration: Union[float, None] = None
+    offset: float = 0.,  # Load start time
+    duration: Union[float, None] = None  # Load duration
 ) -> np.ndarray:
     r"""Load audio.
 
@@ -20,7 +21,7 @@ def load(
     Examples:
         >>> audio = load_audio(path="xx/yy.wav", sr=16000)
     """
-
+    
     # Prepare arguments
     orig_sr = librosa.get_samplerate(path)
 
@@ -45,12 +46,11 @@ def load(
         orig_freq=orig_sr, 
         new_freq=sr
     )
-    # shape: (channels, audio_samples,)
+    # shape: (channels, audio_samples)
 
     if mono:
         audio = torch.mean(audio, dim=0, keepdim=True)
 
     audio = audio.numpy()
-    # shape: (channels, audio_samples,)
 
     return audio

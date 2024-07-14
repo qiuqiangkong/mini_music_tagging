@@ -1,12 +1,9 @@
-from typing import Dict, Tuple, Union
-import re
 import os
-import torch
+import re
 from pathlib import Path
-import pandas as pd
-import random
+from typing import Callable, Dict, Optional, Tuple, Union
+
 import librosa
-import torchaudio
 import numpy as np
 from torch.utils.data import Dataset
 
@@ -35,6 +32,10 @@ class GTZAN(Dataset):
             └── rock (100 files)
     """
 
+    url = "http://marsyas.info/index.html"
+
+    duration = 30024.07  # Dataset duration (s), including training, validation, and testing.
+
     labels = ["blues", "classical", "country", "disco", "hiphop", "jazz", 
         "metal", "pop", "reggae", "rock"]
 
@@ -42,25 +43,28 @@ class GTZAN(Dataset):
     lb_to_ix = {lb: ix for ix, lb in enumerate(labels)}
     ix_to_lb = {ix: lb for ix, lb in enumerate(labels)}
 
-    duration = 30.
-
     def __init__(
         self, 
         root: str = None, 
         split: Union["train", "test"] = "train",
         test_fold: int = 0,  # E.g., fold 0 is used for testing. Fold 1 - 9 are used for training.
         sr: float = 16000,  # Sampling rate
-        download: bool = False,
+        clip_duration = 30.,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None
     ) -> None:
     
         self.root = root
         self.split = split
         self.test_fold = test_fold
         self.sr = sr
-        self.audio_samples = int(GTZAN.duration * self.sr)
+        self.transform = transform
+        self.target_transform = target_transform
+
+        self.audio_samples = int(clip_duration * self.sr)
         
         if not Path(root).exists():
-            raise "Please download the GTZAN dataset from http://marsyas.info/index.html (Invalid anymore. Please search a source)"
+            raise "Please download the GTZAN dataset from {} (Invalid anymore. Please search a source)".format(GTZAN.url)
 
         self.meta_dict = self.load_meta()
         # E.g., meta_dict = {
@@ -79,17 +83,18 @@ class GTZAN(Dataset):
         # shape: (channels, audio_samples)
 
         # Load target
-        target = self.load_target(label=label)
+        target_data = self.load_target(label=label)
         # shape: (classes_num,)
 
-        data = {
+        full_data = {
             "audio_path": str(audio_path),
-            "audio": audio,
-            "target": target,
-            "label": label
+            "audio": audio
         }
 
-        return data
+        # Merge dict
+        full_data.update(target_data)
+
+        return full_data
 
     def __len__(self) -> int:
 
@@ -157,13 +162,16 @@ class GTZAN(Dataset):
 
         return train_audio_names, test_audio_names
 
-    def load_audio(self, path):
+    def load_audio(self, path: str) -> np.ndarray:
 
         audio = load(path=path, sr=self.sr)
         # shape: (channels, audio_samples)
 
         audio = librosa.util.fix_length(data=audio, size=self.audio_samples, axis=-1)
         # shape: (channels, audio_samples)
+
+        if self.transform is not None:
+            audio = self.transform(audio)
 
         return audio
 
@@ -175,23 +183,48 @@ class GTZAN(Dataset):
         target = np.zeros(classes_num, dtype="float32")
         class_ix = lb_to_ix[label]
         target[class_ix] = 1
+        # target: (classes_num,)
 
-        return target
+        target_data = {
+            "target": target,
+            "label": label
+        }
+
+        if self.target_transform:
+            target_data = self.target_transform(target_data)
+
+        return target_data
 
 
 if __name__ == "__main__":
 
     # Example
+    from torch.utils.data import DataLoader
+
     root = "/datasets/gtzan"
+
+    sr = 16000
 
     dataset = GTZAN(
         root=root,
         split="train",
         test_fold=0,
+        sr=sr
     )
 
-    dataloader = torch.utils.data.DataLoader(dataset=dataset)
+    dataloader = DataLoader(dataset=dataset, batch_size=4)
 
     for data in dataloader:
-        print(data)
+        
+        n = 0
+        audio_path = data["audio_path"][n]
+        audio = data["audio"][n].cpu().numpy()
+        target = data["target"][n].cpu().numpy()
+        label = data["label"][n]
         break
+
+    # ------ Visualize ------
+    print("audio_path:", audio_path)
+    print("audio:", audio.shape)
+    print("target:", target.shape)
+    print("label:", label)

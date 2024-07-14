@@ -1,14 +1,17 @@
-import torch
-import torch.nn.functional as F
-from torch.utils.data.sampler import SequentialSampler
-import numpy as np
-import soundfile
-from pathlib import Path
-import torch.optim as optim
-from tqdm import tqdm
 import argparse
 import random
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SequentialSampler
+from tqdm import tqdm
+
 import wandb
+
 wandb.require("core")
 
 from data.gtzan import GTZAN
@@ -30,7 +33,6 @@ def train(args):
     test_step_frequency = 200
     save_step_frequency = 200
     training_steps = 10000
-    debug = False
     wandb_log = True
     device = "cuda"
 
@@ -65,7 +67,7 @@ def train(args):
     test_sampler = SequentialSampler(test_dataset)
     
     # Dataloader
-    train_dataloader = torch.utils.data.DataLoader(
+    train_dataloader = DataLoader(
         dataset=train_dataset, 
         batch_size=batch_size, 
         sampler=train_sampler,
@@ -73,7 +75,7 @@ def train(args):
         pin_memory=pin_memory
     )
 
-    test_dataloader = torch.utils.data.DataLoader(
+    test_dataloader = DataLoader(
         dataset=test_dataset, 
         batch_size=batch_size, 
         sampler=test_sampler,
@@ -98,10 +100,6 @@ def train(args):
         audio = data["audio"].to(device)
         target = data["target"].to(device)
 
-        # Play the audio
-        if debug:
-            play_audio(mixture, target)
-
         # Forward
         model.train()
         output = model(audio=audio)
@@ -117,7 +115,7 @@ def train(args):
         if step % test_step_frequency == 0:
             print("step: {}, loss: {:.3f}".format(step, loss.item()))
             test_acc = validate(model, test_dataloader)
-            print("Accuracy: {}".format(accuracy))
+            print("Accuracy: {}".format(test_acc))
 
             if wandb_log:
                 wandb.log(
@@ -150,12 +148,6 @@ def bce_loss(output, target):
     return F.binary_cross_entropy(output, target)
 
 
-def play_audio(mixture, target):
-    soundfile.write(file="tmp_mixture.wav", data=mixture[0].cpu().numpy().T, samplerate=44100)
-    soundfile.write(file="tmp_target.wav", data=target[0].cpu().numpy().T, samplerate=44100)
-    from IPython import embed; embed(using=False); os._exit(0)
-
-
 class InfiniteSampler:
     def __init__(self, dataset):
 
@@ -164,16 +156,16 @@ class InfiniteSampler:
         
     def __iter__(self):
 
-        i = 0
+        pointer = 0
 
         while True:
 
-            if i == len(self.indexes):
+            if pointer == len(self.indexes):
                 random.shuffle(self.indexes)
-                i = 0
+                pointer = 0
                 
-            index = self.indexes[i]
-            i += 1
+            index = self.indexes[pointer]
+            pointer += 1
 
             yield index
 

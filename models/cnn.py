@@ -1,52 +1,13 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchaudio
-from torchaudio.transforms import MelSpectrogram
 from einops import rearrange
-import numpy as np
-
-
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(ConvBlock, self).__init__()
-
-        self.conv1 = nn.Conv2d(
-            in_channels=in_channels, 
-            out_channels=out_channels, 
-            kernel_size=(3, 3), 
-            padding=(1, 1),
-        )
-        self.conv2 = nn.Conv2d(
-            in_channels=out_channels, 
-            out_channels=out_channels, 
-            kernel_size=(3, 3), 
-            padding=(1, 1),
-        )
-
-        self.bn1 = nn.BatchNorm2d(out_channels)
-        self.bn2 = nn.BatchNorm2d(out_channels)
-
-    def forward(self, x):
-        r"""
-        Args:
-            x: (batch_size, in_channels, time_steps, freq_bins)
-
-        Returns:
-            output: (batch_size, out_channels, time_steps // 2, freq_bins // 2)
-        """
-
-        x = F.relu_(self.bn1(self.conv1(x)))
-        x = F.relu_(self.bn2(self.conv2(x))) 
-
-        output = F.avg_pool2d(x, kernel_size=(2, 2))
-        
-        return output 
+from torchaudio.transforms import MelSpectrogram
 
 
 class Cnn(nn.Module):
     def __init__(self, classes_num):
-        super(Cnn, self).__init__()
+        super().__init__()
 
         self.mel_extractor = MelSpectrogram(
             sample_rate=16000,
@@ -95,3 +56,40 @@ class Cnn(nn.Module):
         output = torch.sigmoid(self.onset_fc(x))
 
         return output
+
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+
+        self.conv1 = nn.Conv2d(
+            in_channels=in_channels, 
+            out_channels=out_channels, 
+            kernel_size=(3, 3), 
+            padding=(1, 1),
+        )
+        self.conv2 = nn.Conv2d(
+            in_channels=out_channels, 
+            out_channels=out_channels, 
+            kernel_size=(3, 3), 
+            padding=(1, 1),
+        )
+
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+
+    def forward(self, x):
+        r"""
+        Args:
+            x: (batch_size, in_channels, time_steps, freq_bins)
+
+        Returns:
+            output: (batch_size, out_channels, time_steps // 2, freq_bins // 2)
+        """
+
+        x = F.relu_(self.bn1(self.conv1(x)))
+        x = F.relu_(self.bn2(self.conv2(x))) 
+
+        output = F.avg_pool2d(x, kernel_size=(2, 2))
+        
+        return output 

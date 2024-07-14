@@ -1,11 +1,13 @@
 
 # A Minimal Implementation of Music tagging
 
-This is an example of building a music tagging system with neural networks. We use the GTZAN dataset containing 1,000 30-second audio clips for training and validation. The GTZAN dataset contains 10 genres. We use 900 audio files for training and use 100 audio files for validation. Here are the log mel spectrograms of different genre audios.
+This is an minimal implementation of music taggign with PyTorch. We use the GTZAN dataset containing 1,000 30-second audio clips for training and validation. The GTZAN dataset contains 10 genres. We use 900 audio files for training and use 100 audio files for validation. We train a convolutional neural network as classifier.
+
+The original link dataset link: [http://marsyas.info/index.html](http://marsyas.info/index.html) is not available anymore. Please search other sources to download the dataset. Here are the log mel spectrograms of different genre audios.
 
 ![Log mel spectrogram](assets/data_spectrograms.png)
 
-The original link dataset link: [http://marsyas.info/index.html](http://marsyas.info/index.html) is not available anymore. Please search other sources to download the dataset. The downloaded dataset looks like:
+The downloaded dataset looks like:
 
 <pre>
 dataset_root (1.3 GB)
@@ -53,7 +55,7 @@ We use Huggingface accelerate toolkit for multiple GPUs training. Here is an exa
 CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch --multi_gpu --num_processes 4 train_accelerate.py
 ```
 
-The training looks like:
+The training takes around 20 min to train for 10,000 steps on a single RTX4090 GPU card. The result looks like:
 
 <pre>
 0it [00:00, ?it/s]step: 0, loss: 0.865           
@@ -76,13 +78,13 @@ The validation accuracy during training looks like:
 
 # 2. Inference
 
-Users may use the trained checkpoints for inference. F
+Users may use the trained checkpoints for inference.
 
 ```python
 CUDA_VISIBLE_DEVICES=0 python inference.py
 ```
 
-or example, we test on fold 0 and get the following results:
+For example, we test on fold 0 and get the following results:
 
 <pre>
 Accuracy: 0.670

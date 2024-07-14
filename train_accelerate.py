@@ -1,20 +1,19 @@
-import torch
-import torch.nn.functional as F
-from torch.utils.data.sampler import SequentialSampler
-import numpy as np
-import soundfile
-from pathlib import Path
-import torch.optim as optim
-from tqdm import tqdm
 import argparse
-import random
+from pathlib import Path
+
+import torch
+import torch.optim as optim
 from accelerate import Accelerator
+from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SequentialSampler
+from tqdm import tqdm
+
 import wandb
+
 wandb.require("core")
 
 from data.gtzan import GTZAN
-from models.cnn import Cnn
-from train import get_model, bce_loss, play_audio, InfiniteSampler, validate
+from train import InfiniteSampler, bce_loss, get_model, validate
 
 
 def train(args):
@@ -32,18 +31,17 @@ def train(args):
     test_step_frequency = 200
     save_step_frequency = 200
     training_steps = 10000
-    debug = False
     wandb_log = True
 
     filename = Path(__file__).stem
     classes_num = GTZAN.classes_num
 
+    if wandb_log:
+        wandb.init(project="mini_music_tagging") 
+
     checkpoints_dir = Path("./checkpoints", filename, model_name) 
 
     root = "/datasets/gtzan"
-
-    if wandb_log:
-        wandb.init(project="mini_music_tagging") 
 
     # Dataset
     train_dataset = GTZAN(
@@ -66,7 +64,7 @@ def train(args):
     test_sampler = SequentialSampler(test_dataset)
     
     # Dataloader
-    train_dataloader = torch.utils.data.DataLoader(
+    train_dataloader = DataLoader(
         dataset=train_dataset, 
         batch_size=batch_size, 
         sampler=train_sampler,
@@ -74,7 +72,7 @@ def train(args):
         pin_memory=pin_memory
     )
 
-    test_dataloader = torch.utils.data.DataLoader(
+    test_dataloader = DataLoader(
         dataset=test_dataset, 
         batch_size=batch_size, 
         sampler=test_sampler,
@@ -91,7 +89,8 @@ def train(args):
     # Prepare for multiprocessing
     accelerator = Accelerator()
     
-    model, optimizer, train_dataloader = accelerator.prepare(model, optimizer, train_dataloader)
+    model, optimizer, train_dataloader = accelerator.prepare(
+        model, optimizer, train_dataloader)
 
     # Create checkpoints directory
     Path(checkpoints_dir).mkdir(parents=True, exist_ok=True)
@@ -102,10 +101,6 @@ def train(args):
         audio = data["audio"]
         target = data["target"]
 
-        # Play the audio.
-        if debug:
-            play_audio(mixture, target)
-
         # Forward
         model.train()
         output = model(audio=audio)
@@ -115,16 +110,22 @@ def train(args):
 
         # Optimize
         optimizer.zero_grad()   # Reset all parameter.grad to 0
-        loss.backward()     # Update all parameter.grad
+        accelerator.backward(loss)     # Update all parameter.grad
         optimizer.step()    # Update all parameters based on all parameter.grad
 
+        # Evaluate
         if step % test_step_frequency == 0:
 
             accelerator.wait_for_everyone()
 
             if accelerator.is_main_process:
 
-                test_acc = validate(model.module, test_dataloader)
+                if accelerator.num_processes == 1:
+                    val_model = model
+                else:
+                    val_model = model.module
+
+                test_acc = validate(val_model, test_dataloader)
                 print("Test Accuracy: {}".format(test_acc))
 
                 if wandb_log:
