@@ -3,6 +3,8 @@
 
 This is an minimal implementation of music taggign with PyTorch. We use the GTZAN dataset containing 1,000 30-second audio clips for training and validation. The GTZAN dataset contains 10 genres. We use 900 audio files for training and use 100 audio files for validation. We train a convolutional neural network as classifier.
 
+## 0. Download dataset
+
 The original link dataset link: [http://marsyas.info/index.html](http://marsyas.info/index.html) is not available anymore. Please search other sources to download the dataset. Here are the log mel spectrograms of different genre audios.
 
 ![Log mel spectrogram](assets/data_spectrograms.png)
@@ -24,7 +26,7 @@ dataset_root (1.3 GB)
     └── rock (100 files)
 </pre>
 
-# 0. Install dependencies
+## 1. Install dependencies
 
 ```bash
 git clone https://github.com/qiuqiangkong/mini_music_tagging
@@ -39,7 +41,7 @@ conda activate music_tagging
 sh env.sh
 ```
 
-# 1. Single GPU training.
+## 2. Single GPU training
 
 We use the Wandb toolkit for logging. You may set wandb_log to False or use other loggers.
 
@@ -47,7 +49,7 @@ We use the Wandb toolkit for logging. You may set wandb_log to False or use othe
 CUDA_VISIBLE_DEVICES=0 python train.py
 ```
 
-# Multiple GPUs training.
+## 3. Multiple GPUs training
 
 We use Huggingface accelerate toolkit for multiple GPUs training. Here is an example of using 4 GPUs for training.
 
@@ -76,7 +78,7 @@ The validation accuracy during training looks like:
 
 ![Validation accuracy](assets/acc_on_fold_0.png)
 
-# 2. Inference
+# 4. Inference
 
 Users may use the trained checkpoints for inference.
 
@@ -90,7 +92,7 @@ For example, we test on fold 0 and get the following results:
 Accuracy: 0.670
 </pre>
 
-# Reference
+## Reference
 
 ```
 @article{kong2020panns,
